@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Activity,
@@ -33,6 +33,22 @@ type OrderStatus = "جديد" | "قيد التجهيز" | "مع الكابتن" 
 type Order = { id: string; customer: string; area: string; total: string; status: OrderStatus; time: string; captain: string };
 
 type Captain = { name: string; phone: string; area: string; status: "متاح" | "في مهمة" | "غير متصل"; orders: number; rating: string };
+
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "https://3000-iydxbea3oqx9cazcng396-b30a46c3.us4.manus.computer").replace(/\/$/, "");
+const statusToArabic: Record<string, OrderStatus> = { new: "جديد", preparing: "قيد التجهيز", ready: "قيد التجهيز", assigned: "مع الكابتن", in_transit: "مع الكابتن", delivered: "تم التسليم", cancelled: "تم التسليم" };
+
+async function callTrpc(path: string, input?: unknown) {
+  const url = `${API_BASE_URL}/api/trpc/${path}`;
+  const response = await fetch(input === undefined ? url : `${url}?input=${encodeURIComponent(JSON.stringify({ json: input }))}`, { credentials: "include" });
+  const payload = await response.json();
+  const result = Array.isArray(payload) ? payload[0] : payload;
+  if (!response.ok || result?.error) throw new Error(result?.error?.json?.message ?? "API request failed");
+  return result?.result?.data?.json ?? result?.result?.data;
+}
+
+function mapApiOrder(order: { id: string; customerName: string; deliveryAddress: string; total: string; status: string; createdAt: string | Date; captainId: number | null }): Order {
+  return { id: order.id, customer: order.customerName, area: order.deliveryAddress, total: `${order.total} ر.س`, status: statusToArabic[order.status] ?? "جديد", time: new Date(order.createdAt).toLocaleTimeString("ar-SA", { hour: "numeric", minute: "2-digit" }), captain: order.captainId ? `كابتن #${order.captainId}` : "غير معيّن" };
+}
 
 const initialOrders: Order[] = [
   { id: "#PH-2048", customer: "أحمد سالم", area: "حي النخيل", total: "128.50 ر.س", status: "جديد", time: "منذ 4 دقائق", captain: "غير معيّن" },
@@ -78,10 +94,23 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [toast, setToast] = useState("");
+  const [apiConnected, setApiConnected] = useState(false);
   const [links, setLinks] = useState({
     customer: "https://8081-iydxbea3oqx9cazcng396-b30a46c3.us4.manus.computer",
     captain: "https://captain.pharma-delivery.app",
   });
+
+  useEffect(() => {
+    let active = true;
+    callTrpc("orders.adminList", {}).then((data) => {
+      if (!active || !Array.isArray(data)) return;
+      setOrders(data.map(mapApiOrder));
+      setApiConnected(true);
+    }).catch(() => {
+      if (active) setApiConnected(false);
+    });
+    return () => { active = false; };
+  }, []);
 
   const filteredOrders = useMemo(() => orders.filter((order) => {
     const term = search.trim().toLowerCase();
@@ -96,6 +125,8 @@ function App() {
   const updateOrderStatus = (id: string, status: OrderStatus) => {
     setOrders((current) => current.map((order) => order.id === id ? { ...order, status } : order));
     notify(`تم تحديث حالة الطلب ${id}`);
+    const statusMap: Record<OrderStatus, string> = { "جديد": "new", "قيد التجهيز": "preparing", "مع الكابتن": "in_transit", "تم التسليم": "delivered" };
+    void callTrpc("orders.setStatus", { orderId: id, status: statusMap[status] }).then(() => setApiConnected(true)).catch(() => notify("تم التحديث محلياً، تعذر الوصول إلى API"));
   };
 
   const assignCaptain = (id: string) => {
@@ -127,7 +158,7 @@ function App() {
         <header className="topbar">
           <button className="mobile-menu" onClick={() => setMenuOpen((value) => !value)}><Menu size={21} /></button>
           <div className="breadcrumb"><span>الرئيسية</span><ArrowLeft size={14} /><b>{pageTitle}</b></div>
-          <div className="topbar-actions"><button className="icon-button notification-button" onClick={() => notify("لا توجد إشعارات جديدة")}><Bell size={19} /><i /></button><div className="topbar-divider" /><div className="topbar-profile"><div className="user-avatar small">ع</div><div><b>عصام فضل</b><span>مدير النظام</span></div><ChevronDown size={15} /></div></div>
+          <div className="topbar-actions"><span className={`api-status ${apiConnected ? "connected" : "offline"}`}>{apiConnected ? "API متصل" : "وضع تجريبي"}</span><button className="icon-button notification-button" onClick={() => notify("لا توجد إشعارات جديدة")}><Bell size={19} /><i /></button><div className="topbar-divider" /><div className="topbar-profile"><div className="user-avatar small">ع</div><div><b>عصام فضل</b><span>مدير النظام</span></div><ChevronDown size={15} /></div></div>
         </header>
 
         <div className="page-wrap">

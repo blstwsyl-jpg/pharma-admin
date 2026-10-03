@@ -1,5 +1,9 @@
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
 
+.api-status { border-radius: 999px; padding: 6px 10px; font-size: 11px; font-weight: 700; }
+.api-status.connected { background: #e2f5ec; color: #16845c; }
+.api-status.offline { background: #fff2da; color: #aa6b00; }
+
 :root { font-family: 'IBM Plex Sans Arabic', sans-serif; color: #173c38; background: #f5f8f7; font-synthesis: none; text-rendering: optimizeLegibility; --ink: #173c38; --muted: #77908c; --line: #e3ece9; --panel: #ffffff; --teal: #117c72; --teal-dark: #0d655e; --soft-teal: #e8f5f2; --shadow: 0 10px 30px rgba(19, 61, 56, .055); }
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; background: #f5f8f7; }
