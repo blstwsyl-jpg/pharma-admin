@@ -33,6 +33,7 @@ type OrderStatus = "جديد" | "قيد التجهيز" | "مع الكابتن" 
 type Order = { id: string; customer: string; area: string; total: string; status: OrderStatus; time: string; captain: string };
 
 type Captain = { name: string; phone: string; area: string; status: "متاح" | "في مهمة" | "غير متصل"; orders: number; rating: string };
+type ApiCaptain = { id: number; name: string | null; phone: string | null; availability: "available" | "busy" | "offline" };
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "https://3000-iydxbea3oqx9cazcng396-b30a46c3.us4.manus.computer").replace(/\/$/, "");
 const statusToArabic: Record<string, OrderStatus> = { new: "جديد", preparing: "قيد التجهيز", ready: "قيد التجهيز", assigned: "مع الكابتن", in_transit: "مع الكابتن", delivered: "تم التسليم", cancelled: "تم التسليم" };
@@ -95,6 +96,7 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [toast, setToast] = useState("");
   const [apiConnected, setApiConnected] = useState(false);
+  const [apiCaptains, setApiCaptains] = useState<ApiCaptain[]>([]);
   const [links, setLinks] = useState({
     customer: "https://8081-iydxbea3oqx9cazcng396-b30a46c3.us4.manus.computer",
     captain: "https://captain.pharma-delivery.app",
@@ -110,6 +112,12 @@ function App() {
       if (active) setApiConnected(false);
     });
     return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    callTrpc("captains.list").then((data) => {
+      if (Array.isArray(data)) setApiCaptains(data);
+    }).catch(() => undefined);
   }, []);
 
   const filteredOrders = useMemo(() => orders.filter((order) => {
@@ -130,8 +138,12 @@ function App() {
   };
 
   const assignCaptain = (id: string) => {
-    setOrders((current) => current.map((order) => order.id === id ? { ...order, captain: "عمر حسن", status: "مع الكابتن" } : order));
-    notify(`تم تعيين عمر حسن للطلب ${id}`);
+    const captain = apiCaptains.find((item) => item.availability === "available") ?? apiCaptains[0];
+    if (!captain) { notify("لا يوجد كابتن مسجل في النظام"); return; }
+    void callTrpc("orders.assign", { orderId: id, captainId: captain.id }).then(() => {
+      setOrders((current) => current.map((order) => order.id === id ? { ...order, captain: captain.name ?? `كابتن #${captain.id}`, status: "مع الكابتن" } : order));
+      notify(`تم تعيين ${captain.name ?? "الكابتن"} للطلب ${id}`);
+    }).catch(() => notify("تعذر تعيين الكابتن؛ تحقق من صلاحيات الإدارة"));
   };
 
   const pageTitle = navItems.find((item) => item.id === activePage)?.label ?? "نظرة عامة";
